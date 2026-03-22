@@ -21,6 +21,9 @@ private:
     State initial_state_{0};
 
     // transitions[symbol][state] = next state
+    // Complete deterministic transition table:
+    // transitions_[a][q] is the unique successor of state q under symbol a.
+    // All transitions must be defined and must target a state in 0..state_count_-1.
     std::vector<std::vector<State>> transitions_;
     std::vector<Output> outputs_;
 
