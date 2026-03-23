@@ -8,6 +8,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <queue>
+#include <set>
+#include <unordered_set>
 
 class Automaton {
 public:
@@ -176,6 +179,101 @@ public:
         return result;
     }
 
+    [[nodiscard]] std::set<State> reachable_states() const {
+        std::set<State> result;
+        std::queue<State> q;
+        std::unordered_set<State> visited;
+
+        q.push(initial_state_);
+        visited.insert(initial_state_);
+
+        while (!q.empty()) {
+            State current = q.front();
+            q.pop();
+            result.insert(current);
+
+            for (Symbol a = 0; a < input_count_; ++a) {
+                State next = transitions_[a][current];
+                if (!visited.contains(next)) {
+                    visited.insert(next);
+                    q.push(next);
+                }
+            }
+        }
+
+        return result;
+    }
+    [[nodiscard]] std::vector<int> partition_by_output() const {
+        std::vector<int> part(state_count_, -1);
+        const auto reachable = reachable_states();
+
+        std::map<Output, int> class_of_output;
+        int next_class = 0;
+
+        for (State q : reachable) {
+            const auto& out = outputs_[q];
+            auto it = class_of_output.find(out);
+            if (it == class_of_output.end()) {
+                class_of_output[out] = next_class;
+                part[q] = next_class;
+                ++next_class;
+            } else {
+                part[q] = it->second;
+            }
+        }
+
+        return part;
+    }
+
+    [[nodiscard]] std::vector<int> refine_partition(const std::vector<int>& prev) const {
+        if (prev.size() != state_count_) {
+            throw std::runtime_error("Partition size does not match number of states.");
+        }
+
+        std::vector<int> part(state_count_, -1);
+        const auto reachable = reachable_states();
+
+        using Key = std::pair<Output, std::vector<int>>;
+        std::map<Key, int> class_of_key;
+        int next_class = 0;
+
+        for (State q : reachable) {
+            std::vector<int> succ_classes;
+            succ_classes.reserve(input_count_);
+
+            for (Symbol a = 0; a < input_count_; ++a) {
+                State nxt = transitions_[a][q];
+                succ_classes.push_back(prev[nxt]);
+            }
+
+            Key key{outputs_[q], std::move(succ_classes)};
+
+            auto it = class_of_key.find(key);
+            if (it == class_of_key.end()) {
+                class_of_key[key] = next_class;
+                part[q] = next_class;
+                ++next_class;
+            } else {
+                part[q] = it->second;
+            }
+        }
+
+        return part;
+    }
+    [[nodiscard]] int distinguishability_degree_by_partition() const {
+        auto part = partition_by_output();
+        int depth = 0;
+
+        while (true) {
+            auto next = refine_partition(part);
+            if (next == part) {
+                return depth;
+            }
+            part = std::move(next);
+            ++depth;
+        }
+    }
+
 private:
     void validate() const {
         if (input_count_ == 0) {
@@ -226,4 +324,5 @@ private:
         const auto last = s.find_last_not_of(" \t\n\r\f\v");
         s = s.substr(first, last - first + 1);
     }
+
 };

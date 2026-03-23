@@ -12,9 +12,10 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 enable_testing()
-add_library(autov03 INTERFACE)
+add_library(autov03 INTERFACE
+        src/examples/automata_examples.hpp)
 target_include_directories(autov03 INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-add_executable(PassiveLearningAutomataV03
+add_executable(test_automata
         tests/test_automaton.cpp
         #tests/test_signature.cpp
         #tests/test_teacher.cpp
@@ -22,11 +23,11 @@ add_executable(PassiveLearningAutomataV03
         #tests/test_sessions.cpp
 )
 
-target_link_libraries(PassiveLearningAutomataV03
+target_link_libraries(test_automata
         PRIVATE
         autov03
         GTest::gtest_main
 )
 
 include(GoogleTest)
-gtest_discover_tests(PassiveLearningAutomataV03)
+gtest_discover_tests(test_automata)
