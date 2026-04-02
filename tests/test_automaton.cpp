@@ -374,3 +374,98 @@ TEST_F(AutomatonFixture, ComputesDistinguishabilityDegreeByPartition) {
         EXPECT_EQ(a.distinguishability_degree_by_partition(), 2);
     }
 }
+TEST_F(AutomatonFixture, ComputesShortestSeparatingWords) {
+    auto check_separates = [&](const Automaton& a,
+                              Automaton::State p,
+                              Automaton::State q,
+                              const std::vector<Automaton::Symbol>& w) {
+        auto p_end = a.next_state(p, w);
+        auto q_end = a.next_state(q, w);
+        EXPECT_NE(a.output(p_end), a.output(q_end));
+    };
+
+    // degree 0
+    {
+        auto a = examples::two_state_flip();
+
+        auto w = a.shortest_separating_word(0, 1);
+        ASSERT_TRUE(w.has_value());
+        EXPECT_TRUE(w->empty());
+
+        auto len = a.shortest_separating_length(0, 1);
+        ASSERT_TRUE(len.has_value());
+        EXPECT_EQ(*len, 0);
+
+        check_separates(a, 0, 1, *w);
+    }
+
+    // degree 1
+    {
+        auto a = examples::degree_one_example();
+
+        auto w = a.shortest_separating_word(0, 1);
+        ASSERT_TRUE(w.has_value());
+        ASSERT_EQ(w->size(), 1u);
+
+        auto len = a.shortest_separating_length(0, 1);
+        ASSERT_TRUE(len.has_value());
+        EXPECT_EQ(*len, 1);
+
+        check_separates(a, 0, 1, *w);
+    }
+
+    // degree 2
+    {
+        auto a = examples::degree_two_example();
+
+        auto w = a.shortest_separating_word(1, 2);
+        ASSERT_TRUE(w.has_value());
+        ASSERT_EQ(w->size(), 2u);
+
+        auto len = a.shortest_separating_length(1, 2);
+        ASSERT_TRUE(len.has_value());
+        EXPECT_EQ(*len, 2);
+
+        check_separates(a, 1, 2, *w);
+    }
+
+    // identical states
+    {
+        auto a = examples::two_state_flip();
+
+        EXPECT_FALSE(a.shortest_separating_word(0, 0).has_value());
+        EXPECT_FALSE(a.shortest_separating_length(0, 0).has_value());
+    }
+}
+
+TEST_F(AutomatonFixture, ReturnsNulloptForEquivalentOrIdenticalPairs) {
+    {
+        auto a = examples::three_state_cycle();
+
+        auto w = a.shortest_separating_word(0, 0);
+        EXPECT_FALSE(w.has_value());
+
+        auto len = a.shortest_separating_length(0, 0);
+        EXPECT_FALSE(len.has_value());
+    }
+}
+
+TEST_F(AutomatonFixture, BfsAndPartitionDegreesAgreeOnExamples) {
+    {
+        auto a = examples::two_state_flip();
+        EXPECT_EQ(a.distinguishability_degree_by_bfs(),
+                  a.distinguishability_degree_by_partition());
+    }
+
+    {
+        auto a = examples::degree_one_example();
+        EXPECT_EQ(a.distinguishability_degree_by_bfs(),
+                  a.distinguishability_degree_by_partition());
+    }
+
+    {
+        auto a = examples::degree_two_example();
+        EXPECT_EQ(a.distinguishability_degree_by_bfs(),
+                  a.distinguishability_degree_by_partition());
+    }
+}

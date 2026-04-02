@@ -56,12 +56,13 @@ namespace examples {
 	}
 
 	inline Automaton degree_two_example() {
-		std::vector<std::vector<Automaton::State>> transitions = {
+		/*std::vector<std::vector<Automaton::State>> transitions = {
 			{2, 3, 4, 5, 4, 5, 0},
 			{3, 2, 4, 5, 4, 5, 1}
 		};
 		std::vector<Automaton::Output> outputs = {"A", "A", "B", "B", "C", "D", "R"};
-		return Automaton(2, 7, transitions, outputs, 6);
+		return Automaton(2, 7, transitions, outputs, 6);*/
+		return Automaton::from_string("2 7 1 3 4 5 6 5 6 2 4 3 5 6 5 0:RAABBCD");
 	}
 
 	namespace specs {
