@@ -14,11 +14,14 @@
 #include <map>
 #include <optional>
 
+#include "types.hpp"
+
 class Automaton {
 public:
-    using State = std::size_t;
-    using Symbol = std::size_t;
-    using Output = std::string;
+public:
+    using State = core_types::StateId;
+    using Symbol = core_types::Symbol;
+    using Output = core_types::Output;
 
 private:
     std::size_t input_count_{0};
