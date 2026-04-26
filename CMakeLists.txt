@@ -14,16 +14,26 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(googletest)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(gtest PRIVATE -w)
+    target_compile_options(gtest_main PRIVATE -w)
+elseif (MSVC)
+    target_compile_options(gtest PRIVATE /W0)
+    target_compile_options(gtest_main PRIVATE /W0)
+endif()
+
 enable_testing()
-add_library(autov03 INTERFACE)
-target_include_directories(autov03 INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# library to include the headers
+add_library(auto_v03 INTERFACE)
+target_include_directories(auto_v03 INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_executable(test_automata
         tests/test_automaton.cpp
+        tests/test_learning_automaton.cpp
 )
 target_link_libraries(test_automata
         PRIVATE
-        autov03
+        auto_v03
         GTest::gtest_main
 )
 
@@ -32,10 +42,39 @@ add_executable(test_signature
 )
 target_link_libraries(test_signature
         PRIVATE
-        autov03
+        auto_v03
         GTest::gtest_main
+)
+
+add_executable(test_learning_automaton
+        tests/test_learning_automaton.cpp
+)
+target_link_libraries(test_learning_automaton
+        PRIVATE
+        auto_v03
+        GTest::gtest_main
+)
+
+add_executable(test_resetx_extra_info
+        tests/test_resetx_extra_info.cpp
+)
+target_link_libraries(test_resetx_extra_info
+        PRIVATE
+        auto_v03
+        GTest::gtest_main
+)
+
+add_executable(passive_learning_automata
+        main.cpp
+        src/reset.hpp
+)
+target_link_libraries(passive_learning_automata
+        PRIVATE
+        auto_v03
 )
 
 include(GoogleTest)
 gtest_discover_tests(test_automata)
 gtest_discover_tests(test_signature)
+gtest_discover_tests(test_learning_automaton)
+gtest_discover_tests(test_resetx_extra_info)

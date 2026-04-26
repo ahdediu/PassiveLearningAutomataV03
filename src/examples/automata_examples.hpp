@@ -65,6 +65,23 @@ namespace examples {
 		return Automaton::from_string("2 7 1 3 4 5 6 5 6 2 4 3 5 6 5 0:RAABBCD");
 	}
 
+	inline Automaton reversible_maze_example() {
+        // 0 1
+        // 2 3
+		std::vector<std::vector<Automaton::State>> transitions = {
+            // Up
+			{0, 1, 0, 1},
+            // Down
+            {2, 3, 2, 3},
+            // Left
+            {0, 0, 2, 2},
+            // Right
+            {1, 1, 3, 3}
+		};
+		std::vector<Automaton::Output> outputs = {"A", "B", "B", "A"};
+		return Automaton(4, 4, transitions, outputs, 0);
+	}
+
 	namespace specs {
 		inline const std::string parser_symbolic =
 			"2 5 3 3 0 2 0 4 0 0 1 2:+-+-+";

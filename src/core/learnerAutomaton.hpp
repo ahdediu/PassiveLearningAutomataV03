@@ -4,7 +4,6 @@
 #pragma once
 
 #include <cstddef>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -13,6 +12,7 @@
 
 #include "signature.hpp"
 #include "types.hpp"
+
 
 /**
  * Learner-side automaton constructed state by state.
@@ -90,31 +90,37 @@ public:
 	 *   replaced this one.
 	 */
 	struct AutomatonNode {
-		StateId id{invalidStateId};
-		Output output{};
+        StateId id{invalidStateId};
+        Output output{"?"};
 
-		StateStatus status{StateStatus::Incomplete};
+        StateStatus status{StateStatus::Incomplete};
 
-		std::optional<SignatureTree> incompleteSignature;
-		CompleteSignature completeSignature{};
+        SignatureTree incompleteSignature;
+        CompleteSignature completeSignature{};
 
-		std::vector<StateId> transitions;
+        std::vector<StateId> transitions;
 
-		StateId parentId{invalidStateId};
-		Symbol parentSymbol{0};
+        StateId parentId{invalidStateId};
+        Symbol parentSymbol{0};
 
-		StateId mergedInto{invalidStateId};
-	};
+        StateId mergedInto{invalidStateId};
+    };
 
 private:
 	std::vector<AutomatonNode> states_;
-	std::unordered_map<CompleteSignature, StateId> completeSignatureToStateId_;
+	std::unordered_map<CompleteSignature, StateId> signature_to_state_;
 
 	StateId initialState_{invalidStateId};
 
 
 	std::size_t alphabetSize_{0};
 	int signatureDepth_{0};
+    mutable std::vector<int8_t> closed_complete_;
+    mutable bool closed_complete_valid_{false};
+
+    void invalidate_reachability_cache() const {
+        closed_complete_valid_ = false;
+    }
 
 public:
 	/**
@@ -210,16 +216,16 @@ public:
 	 *
 	 * @throws std::runtime_error If the initial state already exists.
 	 */
-	StateId create_initial_state() {
-		if (has_initial_state()) {
-			throw std::runtime_error("Initial state already exists.");
-		}
+    StateId create_initial_state() {
+        if (has_initial_state()) {
+            throw std::runtime_error("Initial state already exists.");
+        }
 
-		StateId id = create_incomplete_state_impl(invalidStateId, 0);
-		initialState_ = id;
+        StateId id = create_incomplete_state_impl(invalidStateId, 0);
+        initialState_ = id;
 
-		return id;
-	}
+        return id;
+    }
 
 	/**
 	 * Check whether a complete signature is already known.
@@ -228,7 +234,7 @@ public:
 	 * @return True iff the signature is already present in the complete-state map.
 	 */
 	[[nodiscard]] bool contains_complete_signature(const CompleteSignature &sig) const {
-		return completeSignatureToStateId_.contains(sig);
+		return signature_to_state_.contains(sig);
 	}
 
 	/**
@@ -240,144 +246,224 @@ public:
 	 * @throws std::runtime_error If the signature is not known.
 	 */
 	[[nodiscard]] StateId state_id_of_complete_signature(const CompleteSignature &sig) const {
-		auto it = completeSignatureToStateId_.find(sig);
-		if (it == completeSignatureToStateId_.end()) {
+		auto it = signature_to_state_.find(sig);
+		if (it == signature_to_state_.end()) {
 			throw std::runtime_error("Complete signature not found.");
 		}
 		return it->second;
 	}
 
-	/**
- * Finalize an incomplete state.
- *
- * Ownership policy:
- *   - the state's incompleteSignature is consumed,
- *   - if the completed signature is new, the moved child signatures are adopted
- *     by newly created child states,
- *   - if the completed signature merges into an existing canonical state, the
- *     temporary finalized branch is discarded.
- */
+    [[nodiscard]] bool is_complete(StateId id) const {
+        return state(id).status == StateStatus::Complete;
+    }
+
+    [[nodiscard]] bool is_incomplete(StateId id) const {
+        return state(id).status == StateStatus::Incomplete;
+    }
+
+    [[nodiscard]] bool is_merged(StateId id) const {
+        return state(id).status == StateStatus::Merged;
+    }
+
+    [[nodiscard]] StateId merged_into(StateId id) const {
+        const auto& node = state(id);
+        if (node.status != StateStatus::Merged) {
+            throw std::runtime_error("State is not merged.");
+        }
+        return node.mergedInto;
+    }
+
 	StateId finalize_state(StateId id) {
 		check_state_id(id);
+        invalidate_reachability_cache();
 
-		AutomatonNode &node = states_[id];
-		if (node.status != StateStatus::Incomplete || !node.incompleteSignature.has_value()) {
+		if (states_[id].status != StateStatus::Incomplete) {
 			throw std::runtime_error("finalize_state requires an incomplete state.");
 		}
 
-		auto finalized = std::move(*node.incompleteSignature).finalize_and_split();
+		auto finalized = std::move(states_[id].incompleteSignature).finalize_and_split();
 
-		// LearnerAutomaton now takes responsibility for the ownership transition.
-		node.output = finalized.output;
-		node.completeSignature = finalized.completeSignature;
-		node.incompleteSignature.reset();
+		const CompleteSignature completeSignature = finalized.completeSignature;
+		states_[id].output = finalized.output;
+		states_[id].completeSignature = completeSignature;
 
-		auto it = completeSignatureToStateId_.find(node.completeSignature);
-		if (it != completeSignatureToStateId_.end()) {
-			StateId canonicalId = it->second;
+		auto it = signature_to_state_.find(completeSignature);
+		if (it != signature_to_state_.end()) {
+			const StateId canonicalId = it->second;
+			states_[id].status = StateStatus::Merged;
+			states_[id].mergedInto = canonicalId;
 
-			node.status = StateStatus::Merged;
-			node.mergedInto = canonicalId;
-
-			if (node.parentId != invalidStateId) {
-				states_[node.parentId].transitions[node.parentSymbol] = canonicalId;
+			if (states_[id].parentId != invalidStateId) {
+				states_[states_[id].parentId].transitions[states_[id].parentSymbol] = canonicalId;
 			}
+
+            // Push extra info from finalized subtrees down to canonical state's successors
+            for (auto& entry : finalized.children) {
+                const Symbol a = entry.first;
+                auto& extraTree = entry.second;
+                StateId successorId = states_[canonicalId].transitions[a];
+                if (successorId != invalidStateId) {
+                    // Only push if the successor is incomplete and can accept more info
+                    if (states_[successorId].status == StateStatus::Incomplete) {
+                        states_[successorId].incompleteSignature.merge_info_from(std::move(*extraTree));
+                    }
+                }
+            }
 
 			return canonicalId;
 		}
 
-        node.status = StateStatus::Complete;
-        node.mergedInto = invalidStateId;
+		signature_to_state_.emplace(completeSignature, id);
+		states_[id].status = StateStatus::Complete;
+		states_[id].mergedInto = invalidStateId;
 
-        completeSignatureToStateId_.emplace(node.completeSignature, id);
+		for (auto& entry : finalized.children) {
+			const Symbol a = entry.first;
+			auto& childTree = entry.second;
 
-        for (auto& child : finalized.children) {
-            const Symbol a = child.symbol;
+			if (!childTree) {
+				throw std::runtime_error("finalize_state received a null child tree.");
+			}
+			if (a >= alphabetSize_) {
+				throw std::runtime_error("Child symbol out of range in finalized signature.");
+			}
 
-            if (a >= alphabetSize_) {
-                throw std::runtime_error("Child symbol out of range in finalized signature.");
-            }
+			const StateId childId = create_incomplete_state_impl(id, a);
+            states_[childId].incompleteSignature = std::move(*childTree);
+            states_[id].transitions[a] = childId;
+		}
 
-            StateId childId = create_incomplete_state_impl(id, a);
-            states_[childId].incompleteSignature = std::move(child.signature);
-            node.transitions[a] = childId;
+		return id;
+	}
+    [[nodiscard]] StateId transition(StateId from, Symbol a) const {
+        check_state_id(from);
+        check_symbol(a);
+
+        const AutomatonNode& node = states_[from];
+        if (node.status != StateStatus::Complete) {
+            throw std::runtime_error("Transitions are only valid from complete states.");
         }
 
+        StateId target = node.transitions[a];
+        if (target == invalidStateId) {
+            throw std::runtime_error("Transition not assigned.");
+        }
+
+        return target;
+    }
+
+    [[nodiscard]] bool is_ready_to_finalize(StateId id) const {
+        const auto& node = state(id);
+        return node.status == StateStatus::Incomplete &&
+               node.incompleteSignature.is_complete();
+    }
+
+    [[nodiscard]] bool is_closed(StateId from) const {
+        check_state_id(from);
+
+        if (!closed_complete_valid_ || closed_complete_.size() != states_.size()) {
+            update_closed_complete();
+        }
+        
+        return closed_complete_[from] == 1;
+    }
+
+    [[nodiscard]] bool is_any_incomplete_reachable(StateId from) const {
+        return !is_closed(from);
+    }
+
+private:
+    void update_closed_complete() const {
+        closed_complete_.assign(states_.size(), 1); // Initially all closed
+        closed_complete_valid_ = true;
+        if (states_.empty()) return;
+
+        std::vector<int8_t> is_open(states_.size(), 0);
+        std::vector<std::vector<StateId>> reverse_transitions(states_.size());
+        std::queue<StateId> q;
+
+        for (StateId i = 0; i < states_.size(); ++i) {
+            const auto& node = states_[i];
+            if (node.status == StateStatus::Incomplete) {
+                is_open[i] = 1;
+                q.push(i);
+            }
+            
+            if (node.status == StateStatus::Complete) {
+                for (StateId next : node.transitions) {
+                    if (next != invalidStateId) {
+                        if (next >= states_.size()) continue;
+                        reverse_transitions[next].push_back(i);
+                    }
+                }
+            } else if (node.status == StateStatus::Merged) {
+                StateId target = node.mergedInto;
+                if (target != invalidStateId && target < states_.size()) {
+                    reverse_transitions[target].push_back(i);
+                }
+            }
+        }
+
+        while (!q.empty()) {
+            StateId curr = q.front();
+            q.pop();
+            for (StateId prev : reverse_transitions[curr]) {
+                if (is_open[prev] == 0) {
+                    is_open[prev] = 1;
+                    q.push(prev);
+                }
+            }
+        }
+
+        for (StateId i = 0; i < states_.size(); ++i) {
+            closed_complete_[i] = (is_open[i] == 0) ? 1 : 0;
+        }
+    }
+
+public:
+
+    [[nodiscard]] std::vector<StateId> children_of(StateId id) const {
+        const auto& node = state(id);
+        if (node.status != StateStatus::Complete) {
+            return {};
+        }
+
+        std::vector<StateId> result;
+        for (StateId child : node.transitions) {
+            if (child != invalidStateId) {
+                result.push_back(child);
+            }
+        }
+        return result;
+    }
+
+private:
+    StateId create_incomplete_state_impl(StateId parentId, Symbol parentSymbol) {
+        StateId id = states_.size();
+
+        AutomatonNode node;
+        node.id = id;
+        node.status = StateStatus::Incomplete;
+        node.output = "?";
+        node.incompleteSignature = SignatureTree(signatureDepth_, alphabetSize_);
+        node.transitions.assign(alphabetSize_, invalidStateId);
+        node.parentId = parentId;
+        node.parentSymbol = parentSymbol;
+
+        states_.push_back(std::move(node));
+        invalidate_reachability_cache();
         return id;
     }
 
-	/**
-	 * Move from a complete state through a transition symbol.
-	 *
-	 * @param from Source state id.
-	 * @param a Input symbol.
-	 * @return Target state id.
-	 *
-	 * @throws std::runtime_error If the source state is invalid, incomplete, merged, or the transition is not yet assigned.
-	 */
-	[[nodiscard]] StateId transition(StateId from, Symbol a) const {
-		check_state_id(from);
-		check_symbol(a);
+    void check_state_id(StateId id) const {
+        if (id >= states_.size()) {
+            throw std::runtime_error("LearnerAutomaton state id out of range.");
+        }
+    }
 
-		const AutomatonNode &node = states_[from];
-		if (node.status != StateStatus::Complete) {
-			throw std::runtime_error("Transitions are only valid from complete states.");
-		}
-
-		StateId target = node.transitions[a];
-		if (target == invalidStateId) {
-			throw std::runtime_error("Transition not assigned.");
-		}
-
-		return target;
-	}
-
-private:
-	/**
-	 * Create a new incomplete learner state.
-	 *
-	 * The created node owns an empty SignatureTree and has all transitions
-	 * initialized to invalidStateId.
-	 *
-	 * @param parentId Identifier of the parent state, or invalidStateId for the root.
-	 * @param parentSymbol Input symbol leading from the parent to this state.
-	 * @return Newly created state id.
-	 */
-	StateId create_incomplete_state_impl(StateId parentId, Symbol parentSymbol) {
-		StateId id = states_.size();
-
-		AutomatonNode node;
-		node.id = id;
-		node.status = StateStatus::Incomplete;
-		node.incompleteSignature.emplace(signatureDepth_, alphabetSize_);
-		node.transitions.assign(alphabetSize_, invalidStateId);
-		node.parentId = parentId;
-		node.parentSymbol = parentSymbol;
-
-
-		states_.push_back(std::move(node));
-		return id;
-	}
-
-	/**
-	 * Check whether a state id is valid.
-	 *
-	 * @throws std::runtime_error If the id is out of range.
-	 */
-	void check_state_id(StateId id) const {
-		if (id >= states_.size()) {
-			throw std::runtime_error("LearnerAutomaton state id out of range.");
-		}
-	}
-
-	/**
-	 * Check whether a symbol index is valid.
-	 *
-	 * @throws std::runtime_error If the symbol is out of range.
-	 */
-	void check_symbol(Symbol a) const {
-		if (a >= alphabetSize_) {
-			throw std::runtime_error("LearnerAutomaton symbol out of range.");
-		}
-	}
+    void check_symbol(Symbol a) const {
+        if (a >= alphabetSize_) {
+            throw std::runtime_error("LearnerAutomaton symbol out of range.");
+        }
+    }
 };
