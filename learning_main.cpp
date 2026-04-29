@@ -5,6 +5,7 @@
 #include <iostream>
 #include <map>
 #include <queue>
+#include <random>
 #include <vector>
 
 #include "core/automaton.hpp"
@@ -14,9 +15,11 @@
 #include "back.hpp"
 
 /**
- * Check whether a target Automaton and a Learner's current complete model are isomorphic.
+ * Check whether a target Automaton and a Learner's current complete model are equivalent.
  */
-bool check_isomorphism(const Automaton& target, const Learner& learner, const LearnerAutomaton& learner_model) {
+bool check_equivalence(const Automaton& target,
+                       const Learner& learner,
+                       const LearnerAutomaton& learner_model) {
     if (learner.incomplete_state_count() > 0) {
         return false;
     }
@@ -26,11 +29,6 @@ bool check_isomorphism(const Automaton& target, const Learner& learner, const Le
         if (learner_model.is_complete(i)) {
             ++learner_complete_count;
         }
-    }
-
-    const auto target_reachable = target.reachable_states();
-    if (target_reachable.size() != learner_complete_count) {
-        return false;
     }
 
     std::map<Automaton::State, LearnerAutomaton::StateId> target_to_learner;
@@ -55,6 +53,11 @@ bool check_isomorphism(const Automaton& target, const Learner& learner, const Le
             const auto next_t = target.next_state(a, q_t);
             const auto next_l = learner_model.transition(q_l, a);
 
+            // In a complete model, all transitions must be defined
+            if (next_l == LearnerAutomaton::invalidStateId) {
+                return false;
+            }
+
             if (target.output(next_t) != learner_model.state(next_l).output) {
                 return false;
             }
@@ -64,12 +67,21 @@ bool check_isomorphism(const Automaton& target, const Learner& learner, const Le
                 target_to_learner[next_t] = next_l;
                 work.push(next_t);
             } else if (it->second != next_l) {
+                // This would mean the same target state maps to two different learner states,
+                // which is impossible in a deterministic mapping.
                 return false;
             }
         }
     }
 
-    return true;
+    // Check surjectivity: all complete learner states must be reached by the mapping.
+    // This ensures the learner doesn't have extra behavior or unreachable states.
+    std::set<LearnerAutomaton::StateId> reached_learner_states;
+    for (const auto& pair : target_to_learner) {
+        reached_learner_states.insert(pair.second);
+    }
+
+    return reached_learner_states.size() == learner_complete_count;
 }
 
 enum class ProtocolType {
@@ -83,10 +95,11 @@ struct RunResult {
     std::string protocol;
     LearningStatistics stats;
     double duration_ms;
-    bool isomorphic;
-    std::size_t s; // Complete states
-    std::size_t m; // Merged states
-    std::size_t k; // Alphabet size
+    bool equivalent;
+    std::size_t s;  // Complete states
+    std::size_t m;  // Merged states
+    std::size_t k;  // Alphabet size
+    int d;          // Distinguishability degree
 };
 
 struct AggregatedResult {
@@ -101,12 +114,19 @@ struct AggregatedResult {
     double avg_duration_ms;
     double success_rate;
     std::size_t k;
+    int d;          // Distinguishability degree
 };
 
-RunResult run_example(const Automaton& target, const std::string& name, ProtocolType type, int forced_depth = -1, unsigned int seed = 42) {
+RunResult run_example(const Automaton& target,
+                      const std::string& name,
+                      ProtocolType type,
+                      int forced_depth = -1,
+                      unsigned int seed = 42) {
     int signature_depth = target.distinguishability_degree_by_partition();
-    if (forced_depth != -1) signature_depth = forced_depth;
-    
+    if (forced_depth != -1) {
+        signature_depth = forced_depth;
+    }
+
     std::unique_ptr<Teacher> teacher_ptr;
     std::unique_ptr<Learner> learner;
     std::unique_ptr<LearningProtocol> protocol;
@@ -116,7 +136,8 @@ RunResult run_example(const Automaton& target, const std::string& name, Protocol
     switch (type) {
         case ProtocolType::Reset: {
             auto r_teacher = std::make_unique<ResetTeacher>(target, seed);
-            auto r_learner = std::make_unique<ResetLearner>(target.input_count(), signature_depth);
+            auto r_learner =
+                std::make_unique<ResetLearner>(target.input_count(), signature_depth);
             model_ptr = &r_learner->automaton();
             protocol = std::make_unique<ResetProtocol>(*r_teacher, *r_learner);
             teacher_ptr = std::move(r_teacher);
@@ -126,7 +147,9 @@ RunResult run_example(const Automaton& target, const std::string& name, Protocol
         }
         case ProtocolType::ResetX: {
             auto x_teacher = std::make_unique<ResetTeacher>(target, seed);
-            auto x_learner = std::make_unique<ResetXLearner>(target.input_count(), signature_depth, false);
+            auto x_learner = std::make_unique<ResetXLearner>(target.input_count(),
+                                                                signature_depth,
+                                                                false);
             model_ptr = &x_learner->automaton();
             protocol = std::make_unique<ResetXProtocol>(*x_teacher, *x_learner);
             teacher_ptr = std::move(x_teacher);
@@ -136,14 +159,15 @@ RunResult run_example(const Automaton& target, const std::string& name, Protocol
         }
         case ProtocolType::Back: {
             auto b_teacher = std::make_unique<BackTeacher>(target, seed);
-            auto b_learner = std::make_unique<BackLearner>(target.input_count(), signature_depth);
+            auto b_learner =
+                std::make_unique<BackLearner>(target.input_count(), signature_depth);
             model_ptr = &b_learner->automaton();
-            
+
             BackTeacher& b_teacher_ref = *b_teacher;
             BackLearner& b_learner_ref = *b_learner;
-            
+
             protocol = std::make_unique<BackProtocol>(b_teacher_ref, b_learner_ref);
-            
+
             teacher_ptr = std::move(b_teacher);
             learner = std::move(b_learner);
             protocol_name = "Back";
@@ -152,17 +176,15 @@ RunResult run_example(const Automaton& target, const std::string& name, Protocol
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
-    
+
     // Set progress callback
     protocol->set_progress_callback([](const LearningStatistics& s) {
-        if (s.trials % 1000 == 0) { // Throttle updates more for performance
-            std::cout << "\r  Progress: T=" << std::setw(9) << s.trials 
-                      << " ?=" << std::setw(4) << s.queries
-                      << " !=" << std::setw(4) << s.backs
-                      << " s=" << std::setw(4) << s.complete_states
-                      << " i=" << std::setw(4) << s.incomplete_states
-                      << " m=" << std::setw(4) << s.merges
-                      << "    " << std::flush;
+        if (s.trials % 1000 == 0) {  // Throttle updates more for performance
+            std::cout << "\r  Progress: T=" << std::setw(9) << s.trials
+                      << " ?=" << std::setw(4) << s.queries << " !=" << std::setw(4)
+                      << s.backs << " s=" << std::setw(4) << s.complete_states
+                      << " i=" << std::setw(4) << s.incomplete_states << " m="
+                      << std::setw(4) << s.merges << "    " << std::flush;
         }
     });
 
@@ -176,10 +198,12 @@ RunResult run_example(const Automaton& target, const std::string& name, Protocol
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
-    
-    std::cout << "\r" << std::string(80, ' ') << "\r" << std::flush; // Clear progress line
-    
-    double duration = std::chrono::duration<double, std::milli>(end_time - start_time).count();
+
+    std::cout << "\r" << std::string(80, ' ') << "\r"
+              << std::flush;  // Clear progress line
+
+    double duration =
+        std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
     std::size_t complete_count = 0;
     for (std::size_t i = 0; i < model_ptr->state_count(); ++i) {
@@ -189,27 +213,42 @@ RunResult run_example(const Automaton& target, const std::string& name, Protocol
     }
     std::size_t total_states = model_ptr->state_count();
 
-    return {
-        name,
-        protocol_name,
-        protocol->statistics(),
-        duration,
-        check_isomorphism(target, *learner, *model_ptr),
-        complete_count,
-        total_states - complete_count,
-        target.input_count()
-    };
+    return {name,
+            protocol_name,
+            protocol->statistics(),
+            duration,
+            check_equivalence(target, *learner, *model_ptr),
+            complete_count,
+            total_states - complete_count,
+            target.input_count(),
+            signature_depth};
 }
 
-AggregatedResult run_benchmark(const Automaton& target, const std::string& name, ProtocolType type, int num_runs = 10, int forced_depth = -1) {
+AggregatedResult run_benchmark(const Automaton& target,
+                                const std::string& name,
+                                ProtocolType type,
+                                int num_runs = 10,
+                                int forced_depth = -1,
+                                bool repeatable_experiments = true) {
     std::string protocol_str;
-    switch(type) {
-        case ProtocolType::Reset: protocol_str = "Reset"; break;
-        case ProtocolType::ResetX: protocol_str = "ResetX"; break;
-        case ProtocolType::Back: protocol_str = "Back"; break;
+    switch (type) {
+        case ProtocolType::Reset:
+            protocol_str = "Reset";
+            break;
+        case ProtocolType::ResetX:
+            protocol_str = "ResetX";
+            break;
+        case ProtocolType::Back:
+            protocol_str = "Back";
+            break;
     }
-    
-    std::cout << "Benchmarking " << name << " (" << protocol_str << ") over " << num_runs << " runs..." << (forced_depth != -1 ? " [FORCED DEPTH " + std::to_string(forced_depth) + "]" : "") << std::endl;
+
+    std::cout << "Benchmarking " << name << " (" << protocol_str << ") over " << num_runs
+              << " runs..." << (repeatable_experiments ? " [REPEATABLE]" : " [RANDOM]")
+              << (forced_depth != -1
+                      ? " [FORCED DEPTH " + std::to_string(forced_depth) + "]"
+                      : "")
+              << std::endl;
 
     double total_trials = 0;
     double total_queries = 0;
@@ -221,9 +260,15 @@ AggregatedResult run_benchmark(const Automaton& target, const std::string& name,
     int successful_runs = 0;
     std::size_t k = 0;
 
+    std::random_device random_device;
+
     for (int i = 0; i < num_runs; ++i) {
         try {
-            RunResult res = run_example(target, name, type, forced_depth, 42 + i);
+            const unsigned int seed = repeatable_experiments
+                                          ? static_cast<unsigned int>(42 + i)
+                                          : random_device();
+
+            RunResult res = run_example(target, name, type, forced_depth, seed);
             total_trials += res.stats.trials;
             total_queries += res.stats.queries;
             total_back_signals += res.stats.backs;
@@ -232,7 +277,7 @@ AggregatedResult run_benchmark(const Automaton& target, const std::string& name,
             total_m += res.m;
             total_duration += res.duration_ms;
             k = res.k;
-            if (res.isomorphic) {
+            if (res.equivalent) {
                 successful_runs++;
             }
         } catch (const std::exception& e) {
@@ -240,25 +285,30 @@ AggregatedResult run_benchmark(const Automaton& target, const std::string& name,
         }
     }
 
-    return {
-        name,
-        protocol_str,
-        total_trials / num_runs,
-        total_queries / num_runs,
-        total_back_signals / num_runs,
-        total_backs / num_runs,
-        total_s / num_runs,
-        total_m / num_runs,
-        total_duration / num_runs,
-        (double)successful_runs / num_runs * 100.0,
-        k
-    };
+    int d = target.distinguishability_degree_by_partition();
+    if (forced_depth != -1) {
+        d = forced_depth;
+    }
+
+    return {name,
+            protocol_str,
+            total_trials / num_runs,
+            total_queries / num_runs,
+            total_back_signals / num_runs,
+            total_backs / num_runs,
+            total_s / num_runs,
+            total_m / num_runs,
+            total_duration / num_runs,
+            (double)successful_runs / num_runs * 100.0,
+            k,
+            d};
 }
 
 void print_comparison(const std::vector<AggregatedResult>& results) {
-    std::cout << "\n" << std::setfill('=') << std::setw(140) << "" << std::setfill(' ') << "\n";
+    std::cout << "\n" << std::setfill('=') << std::setw(145) << "" << std::setfill(' ') << "\n";
     std::cout << std::left << std::setw(20) << "Example" 
               << std::setw(10) << "Protocol" 
+              << std::setw(5) << "d"
               << std::right << std::setw(12) << "Trials(T)" 
               << std::setw(10) << "?" 
               << std::setw(10) << "!" 
@@ -268,7 +318,7 @@ void print_comparison(const std::vector<AggregatedResult>& results) {
               << std::setw(15) << "s+m = kn+1" 
               << std::setw(12) << "Time(ms)" 
               << std::setw(12) << "Success %" << "\n";
-    std::cout << std::setfill('-') << std::setw(140) << "" << std::setfill(' ') << "\n";
+    std::cout << std::setfill('-') << std::setw(145) << "" << std::setfill(' ') << "\n";
 
     for (const auto& res : results) {
         // Formula: s + m = k*n + 1 where n = s
@@ -278,6 +328,7 @@ void print_comparison(const std::vector<AggregatedResult>& results) {
 
         std::cout << std::left << std::setw(20) << res.name 
                   << std::setw(10) << res.protocol 
+                  << std::left << std::setw(5) << res.d
                   << std::right << std::setw(12) << std::fixed << std::setprecision(1) << res.avg_trials 
                   << std::setw(10) << (int)res.avg_queries 
                   << std::setw(10) << (int)res.avg_back_signals
@@ -288,22 +339,24 @@ void print_comparison(const std::vector<AggregatedResult>& results) {
                   << std::setw(12) << res.avg_duration_ms 
                   << std::setw(12) << res.success_rate << "%\n";
     }
-    std::cout << std::setfill('=') << std::setw(140) << "" << std::setfill(' ') << "\n\n";
+    std::cout << std::setfill('=') << std::setw(145) << "" << std::setfill(' ') << "\n\n";
 }
 
 int main() {
     try {
         std::vector<AggregatedResult> results;
-        const int num_runs = 5;
+        const int num_runs = 10;
+
+        const bool repeatable_experiments = false;
 
         auto run_benchmarks = [&](const Automaton& target, const std::string& name, bool skip_no_loop_detect = false, int depth = -1) {
             if (!skip_no_loop_detect) {
-                results.push_back(run_benchmark(target, name, ProtocolType::Reset, num_runs, depth));
+                //results.push_back(run_benchmark(target, name, ProtocolType::Reset, num_runs, depth, repeatable_experiments));
             }
             if (!skip_no_loop_detect) {
-                results.push_back(run_benchmark(target, name, ProtocolType::ResetX, num_runs, depth));
+                //results.push_back(run_benchmark(target, name, ProtocolType::ResetX, num_runs, depth, repeatable_experiments));
             }
-            results.push_back(run_benchmark(target, name, ProtocolType::Back, num_runs, depth));
+            results.push_back(run_benchmark(target, name, ProtocolType::Back, num_runs, depth, repeatable_experiments));
         };
 
 //        run_benchmarks(examples::two_state_flip(), "two_state_flip");
@@ -314,29 +367,44 @@ int main() {
 //        run_benchmarks(examples::parser_symbolic_example(), "parser_symbolic");
 //        run_benchmarks(examples::parser_numeric_example(), "parser_numeric");
 
-        // Load automata from file
-        std::vector<std::string> potential_paths = {
-            "data/random/D1testAutomata10to640expStates.txt",
-            "../data/random/D1testAutomata10to640expStates.txt",
-            "../../data/random/D1testAutomata10to640expStates.txt"
+        struct BenchmarkFile {
+            std::string relative_path;
+            std::string prefix;
         };
-        
-        std::string file_path;
-        for (const auto& path : potential_paths) {
-            std::ifstream f(path);
-            if (f.good()) {
-                file_path = path;
-                break;
-            }
-        }
 
-        if (file_path.empty()) {
-            std::cerr << "Error: Could not find data/random/D1testAutomata10to640expStates.txt in any expected location." << std::endl;
-        } else {
+        std::vector<BenchmarkFile> benchmark_files = {
+            //{"data/random/D1testAutomata10to640expStates.txt", "D1_"},
+            {"data/grid1.txt", "G1_"},
+            {"data/grid2.txt", "G2_"},
+            {"data/grid3.txt", "G3_"},
+            {"data/grid4.txt", "G4_"}
+        };
+
+        for (const auto& bf : benchmark_files) {
+            std::vector<std::string> potential_paths = {
+                bf.relative_path,
+                "../" + bf.relative_path,
+                "../../" + bf.relative_path,
+                "../../../" + bf.relative_path
+            };
+            
+            std::string file_path;
+            for (const auto& path : potential_paths) {
+                std::ifstream f(path);
+                if (f.good()) {
+                    file_path = path;
+                    break;
+                }
+            }
+
+            if (file_path.empty()) {
+                continue; // Skip if not found
+            }
+
             try {
                 auto file_automata = Automaton::read_all_from_file(file_path);
                 for (const auto& target : file_automata) {
-                    std::string name = "D1_" + std::to_string(target.state_count());
+                    std::string name = bf.prefix + std::to_string(target.state_count());
                     run_benchmarks(target, name);
                 }
             } catch (const std::exception& e) {

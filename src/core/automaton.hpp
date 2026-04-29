@@ -34,6 +34,8 @@ private:
     // All transitions must be defined and must target a state in 0...state_count_-1.
     std::vector<std::vector<State> > transitions_;
     std::vector<Output> outputs_;
+    std::string description_;
+    std::map<State, std::string> state_descriptions_;
 
 public:
     Automaton() = default;
@@ -44,16 +46,67 @@ public:
      */
     Automaton(std::size_t input_count,
               std::size_t state_count,
-              std::vector<std::vector<State> > transitions,
-              std::vector<Output> outputs,
+              std::vector<std::vector<State> > transitions = {},
+              std::vector<Output> outputs = {},
               State initial_state = 0)
         : input_count_(input_count),
           state_count_(state_count),
           initial_state_(initial_state),
           transitions_(std::move(transitions)),
           outputs_(std::move(outputs)) {
+        if (transitions_.empty() && input_count_ > 0 && state_count_ > 0) {
+            transitions_.assign(input_count_, std::vector<State>(state_count_, 0));
+        }
+        if (outputs_.empty() && state_count_ > 0) {
+            outputs_.assign(state_count_, "");
+        }
         validate();
     }
+
+    // Constructor to match the tools/generateIndoorMaps expectation
+    // (state_count, input_count, optional_maps...)
+    template<typename T1, typename T2>
+    Automaton(std::size_t state_count, std::size_t input_count, T1, T2)
+        : input_count_(input_count), state_count_(state_count), initial_state_(0) {
+        transitions_.assign(input_count_, std::vector<State>(state_count_, 0));
+        outputs_.assign(state_count_, "");
+    }
+
+    // Compatibility methods for generator tools
+    [[nodiscard]] std::size_t getInputSymbolCount() const { return input_count_; }
+    [[nodiscard]] std::size_t getStateCount() const { return state_count_; }
+    [[nodiscard]] State getNextState(State q, Symbol a) const { return next_state(a, q); }
+    [[nodiscard]] const Output& getOutput(State q) const { return output(q); }
+
+    void setOutput(State q, Output o) {
+        check_state(q);
+        outputs_[q] = std::move(o);
+    }
+
+    void setOutput(State q, int o) {
+        check_state(q);
+        outputs_[q] = std::to_string(o);
+    }
+
+    void addTransition(Symbol a, State q, State next) {
+        check_symbol(a);
+        check_state(q);
+        check_state(next);
+        transitions_[a][q] = next;
+    }
+
+    void set_description(std::string d) { description_ = std::move(d); }
+    [[nodiscard]] const std::string& get_description() const { return description_; }
+
+    template<typename MapType>
+    void set_state_description(MapType desc) {
+        state_descriptions_.clear();
+        for (auto const& [k, v] : desc) {
+            state_descriptions_[static_cast<State>(k)] = v;
+        }
+    }
+
+    [[nodiscard]] const std::map<State, std::string>& get_state_descriptions() const { return state_descriptions_; }
 
     [[nodiscard]] std::size_t input_count() const { return input_count_; }
     [[nodiscard]] std::size_t state_count() const { return state_count_; }

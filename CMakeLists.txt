@@ -65,13 +65,15 @@ target_link_libraries(test_resetx_extra_info
 )
 
 add_executable(passive_learning_automata
-        main.cpp
+        learning_main.cpp
         src/reset.hpp
 )
 target_link_libraries(passive_learning_automata
         PRIVATE
         auto_v03
 )
+
+add_subdirectory(tools/generateIndoorMaps)
 
 include(GoogleTest)
 gtest_discover_tests(test_automata)
