@@ -205,10 +205,10 @@ public:
     BackProtocol(BackTeacher& teacher, BackLearner& learner)
         : LearningProtocol(teacher, learner), back_teacher_(teacher), back_learner_(learner) {}
 
-    void reset() override {
+    /*void reset() override {
         teacher_stack_.clear();
         learner_stack_.clear();
-    }
+    }*/
 
     void step() override {
         ++stats_.trials;
