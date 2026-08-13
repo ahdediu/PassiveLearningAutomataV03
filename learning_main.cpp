@@ -11,7 +11,6 @@
 #include "core/automaton.hpp"
 #include "examples/automata_examples.hpp"
 #include "reset.hpp"
-#include "resetX.hpp"
 #include "back.hpp"
 
 /**
@@ -86,7 +85,6 @@ bool check_equivalence(const Automaton& target,
 
 enum class ProtocolType {
     Reset,
-    ResetX,
     Back
 };
 
@@ -143,18 +141,6 @@ RunResult run_example(const Automaton& target,
             teacher_ptr = std::move(r_teacher);
             learner = std::move(r_learner);
             protocol_name = "Reset";
-            break;
-        }
-        case ProtocolType::ResetX: {
-            auto x_teacher = std::make_unique<ResetTeacher>(target, seed);
-            auto x_learner = std::make_unique<ResetXLearner>(target.input_count(),
-                                                                signature_depth,
-                                                                false);
-            model_ptr = &x_learner->automaton();
-            protocol = std::make_unique<ResetXProtocol>(*x_teacher, *x_learner);
-            teacher_ptr = std::move(x_teacher);
-            learner = std::move(x_learner);
-            protocol_name = "ResetX";
             break;
         }
         case ProtocolType::Back: {
@@ -234,9 +220,6 @@ AggregatedResult run_benchmark(const Automaton& target,
     switch (type) {
         case ProtocolType::Reset:
             protocol_str = "Reset";
-            break;
-        case ProtocolType::ResetX:
-            protocol_str = "ResetX";
             break;
         case ProtocolType::Back:
             protocol_str = "Back";
@@ -352,9 +335,6 @@ int main() {
         auto run_benchmarks = [&](const Automaton& target, const std::string& name, bool skip_no_loop_detect = false, int depth = -1) {
             if (!skip_no_loop_detect) {
                 //results.push_back(run_benchmark(target, name, ProtocolType::Reset, num_runs, depth, repeatable_experiments));
-            }
-            if (!skip_no_loop_detect) {
-                //results.push_back(run_benchmark(target, name, ProtocolType::ResetX, num_runs, depth, repeatable_experiments));
             }
             results.push_back(run_benchmark(target, name, ProtocolType::Back, num_runs, depth, repeatable_experiments));
         };

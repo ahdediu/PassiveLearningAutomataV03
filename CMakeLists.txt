@@ -54,10 +54,10 @@ target_link_libraries(test_learning_automaton
         GTest::gtest_main
 )
 
-add_executable(test_resetx_extra_info
-        tests/test_resetx_extra_info.cpp
+add_executable(test_back_protocol
+        tests/test_back_protocol.cpp
 )
-target_link_libraries(test_resetx_extra_info
+target_link_libraries(test_back_protocol
         PRIVATE
         auto_v03
         GTest::gtest_main
@@ -78,4 +78,4 @@ include(GoogleTest)
 gtest_discover_tests(test_automata)
 gtest_discover_tests(test_signature)
 gtest_discover_tests(test_learning_automaton)
-gtest_discover_tests(test_resetx_extra_info)
+gtest_discover_tests(test_back_protocol)

@@ -91,6 +91,9 @@ public:
     }
 
     [[nodiscard]] Output observe() const override {
+        if (current_path_.size() > automaton_.signature_depth()) {
+            return "?";
+        }
         const auto& node = automaton_.state(current_state_);
         if (node.status == LearnerAutomaton::StateStatus::Incomplete) {
             Output pred = node.incompleteSignature.peek_value_at_path(current_path_);
@@ -116,6 +119,8 @@ public:
             return false; 
         }
 
+        if (current_path_.size() > automaton_.signature_depth()) return false;
+
         auto& sig = node.incompleteSignature;
         const Output current = sig.read_value_at_path(current_path_);
         if (current == value) {
@@ -133,7 +138,9 @@ public:
     void advance(Symbol a) override {
         auto& node = automaton_.state(current_state_);
         if (node.status != LearnerAutomaton::StateStatus::Complete) {
-            current_path_.push_back(a);
+            if (current_path_.size() <= automaton_.signature_depth()) {
+                current_path_.push_back(a);
+            }
             return;
         }
         current_state_ = automaton_.transition(current_state_, a);
@@ -258,34 +265,20 @@ protected:
     
     bool promote() override {
         auto& model = back_learner_.automaton();
-        std::queue<StateId> to_check;
-        to_check.push(back_learner_.current_state());
-        bool any_promoted = false;
+        const StateId id = back_learner_.current_state();
 
-        while (!to_check.empty()) {
-            const StateId id = to_check.front();
-            to_check.pop();
-
-            if (id < model.state_count() && model.is_ready_to_finalize(id)) {
-                const StateId promoted = model.finalize_state(id);
-                any_promoted = true;
-                if (promoted != id) {
-                    ++stats_.merges;
-                }
-                
-                update_stacks_after_finalize(id, promoted);
-
-                if (promoted == id) {
-                    for (StateId child : model.children_of(promoted)) {
-                        to_check.push(child);
-                    }
-                }
-            }
+        if (id >= model.state_count() || !model.is_ready_to_finalize(id)) {
+            return false;
         }
-        if (any_promoted) {
-            back_learner_.normalize();
+
+        const StateId promoted = model.finalize_state(id);
+        if (promoted != id) {
+            ++stats_.merges;
         }
-        return any_promoted;
+
+        update_stacks_after_finalize(id, promoted);
+        back_learner_.normalize();
+        return true;
     }
     void advance() override {}
     void reset_step() override {}
