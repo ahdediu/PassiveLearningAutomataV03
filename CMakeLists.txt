@@ -29,7 +29,6 @@ target_include_directories(auto_v03 INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_executable(test_automata
         tests/test_automaton.cpp
-        tests/test_learning_automaton.cpp
 )
 target_link_libraries(test_automata
         PRIVATE

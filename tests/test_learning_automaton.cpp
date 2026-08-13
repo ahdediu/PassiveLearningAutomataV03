@@ -74,7 +74,7 @@ TEST(LearnerAutomatonTest, FinalizesDepth0StateWithoutMerge) {
     const StateId returned = la.finalize_state(id);
 
     EXPECT_EQ(returned, id);
-    EXPECT_EQ(la.state_count(), 1u);
+    EXPECT_EQ(la.state_count(), 3u);
 
     const auto& final_node = la.state(id);
     EXPECT_EQ(final_node.status, LearnerAutomaton::StateStatus::Complete);
@@ -82,6 +82,16 @@ TEST(LearnerAutomatonTest, FinalizesDepth0StateWithoutMerge) {
     EXPECT_FALSE(final_node.completeSignature.empty());
     EXPECT_TRUE(la.contains_complete_signature(final_node.completeSignature));
     EXPECT_EQ(la.state_id_of_complete_signature(final_node.completeSignature), id);
+
+    const StateId left = la.transition(id, 0);
+    const StateId right = la.transition(id, 1);
+    ASSERT_NE(left, right);
+    EXPECT_TRUE(la.is_incomplete(left));
+    EXPECT_TRUE(la.is_incomplete(right));
+    EXPECT_FALSE(la.is_ready_to_finalize(left));
+    EXPECT_FALSE(la.is_ready_to_finalize(right));
+    EXPECT_EQ(la.state(left).incompleteSignature.peek_value_at_path({}), "?");
+    EXPECT_EQ(la.state(right).incompleteSignature.peek_value_at_path({}), "?");
 }
 
 TEST(LearnerAutomatonTest, FinalizesChildrenAndKeepsDistinctCompleteStatesWhenSignaturesDiffer) {
@@ -103,14 +113,16 @@ TEST(LearnerAutomatonTest, FinalizesChildrenAndKeepsDistinctCompleteStatesWhenSi
     ASSERT_NE(right, LearnerAutomaton::invalidStateId);
     ASSERT_NE(left, right);
 
-    auto& left_node = la.state(left);
-    auto& right_node = la.state(right);
+    auto& left_signature = la.state(left).incompleteSignature;
+    auto& right_signature = la.state(right).incompleteSignature;
 
-    EXPECT_EQ(left_node.output, "A");
-    EXPECT_EQ(right_node.output, "B");
+    EXPECT_EQ(left_signature.peek_value_at_path({}), "A");
+    EXPECT_EQ(right_signature.peek_value_at_path({}), "B");
 
-    make_complete_depth_1_signature(left_node.incompleteSignature, "L", {"X", "Y"});
-    make_complete_depth_1_signature(right_node.incompleteSignature, "R", {"X", "Z"});
+    set_node_value(left_signature, {0}, "X");
+    set_node_value(left_signature, {1}, "Y");
+    set_node_value(right_signature, {0}, "X");
+    set_node_value(right_signature, {1}, "Z");
 
     const StateId left_result = la.finalize_state(left);
     const StateId right_result = la.finalize_state(right);
@@ -140,11 +152,16 @@ TEST(LearnerAutomatonTest, MergesEquivalentStatesAndRedirectsParentTransition) {
     ASSERT_NE(second_child, LearnerAutomaton::invalidStateId);
     ASSERT_NE(first_child, second_child);
 
-    auto& first_node = la.state(first_child);
-    auto& second_node = la.state(second_child);
+    auto& first_signature = la.state(first_child).incompleteSignature;
+    auto& second_signature = la.state(second_child).incompleteSignature;
 
-    make_complete_depth_1_signature(first_node.incompleteSignature, "S", {"X", "X"});
-    make_complete_depth_1_signature(second_node.incompleteSignature, "S", {"X", "X"});
+    EXPECT_EQ(first_signature.peek_value_at_path({}), "C");
+    EXPECT_EQ(second_signature.peek_value_at_path({}), "C");
+
+    set_node_value(first_signature, {0}, "X");
+    set_node_value(first_signature, {1}, "X");
+    set_node_value(second_signature, {0}, "X");
+    set_node_value(second_signature, {1}, "X");
 
     const StateId canonical_first = la.finalize_state(first_child);
     EXPECT_EQ(canonical_first, first_child);
@@ -209,12 +226,14 @@ TEST(LearnerAutomatonTest, RejectsFinalizingNonIncompleteState) {
     la.finalize_state(id);
 
     EXPECT_THROW(la.finalize_state(id), std::runtime_error);
-    EXPECT_THROW(
-        [&] {
-            static_cast<void>(la.transition(id, 0));
-        }(),
-        std::runtime_error
-    );
+
+    const StateId left = la.transition(id, 0);
+    const StateId right = la.transition(id, 1);
+    ASSERT_NE(left, right);
+    EXPECT_TRUE(la.is_incomplete(left));
+    EXPECT_TRUE(la.is_incomplete(right));
+    EXPECT_FALSE(la.is_ready_to_finalize(left));
+    EXPECT_FALSE(la.is_ready_to_finalize(right));
 }
 
 TEST(LearnerAutomatonTest, ContainsKnownCompleteSignature) {
@@ -279,73 +298,128 @@ TEST(LearnerAutomatonTest, FinalizedDepth1StatePropagatesChildSignatures) {
     EXPECT_EQ(right_node.incompleteSignature.read_value_at_path({}), "B");
 }
 
+TEST(LearnerAutomatonTest, FinalizingBoundedOnlySignatureNeverCreatesReadySuccessor) {
+    LearnerAutomaton la(2, 2);
+    const StateId root = la.create_initial_state();
+
+    auto& signature = la.state(root).incompleteSignature;
+    set_node_value(signature, {}, "R");
+    set_node_value(signature, {0}, "A");
+    set_node_value(signature, {1}, "B");
+    set_node_value(signature, {0, 0}, "A0");
+    set_node_value(signature, {0, 1}, "A1");
+    set_node_value(signature, {1, 0}, "B0");
+    set_node_value(signature, {1, 1}, "B1");
+
+    ASSERT_TRUE(signature.is_complete());
+    ASSERT_EQ(la.finalize_state(root), root);
+
+    const StateId left = la.transition(root, 0);
+    const StateId right = la.transition(root, 1);
+
+    ASSERT_TRUE(la.is_incomplete(left));
+    ASSERT_TRUE(la.is_incomplete(right));
+    EXPECT_FALSE(la.is_ready_to_finalize(left));
+    EXPECT_FALSE(la.is_ready_to_finalize(right));
+
+    const auto& left_signature = la.state(left).incompleteSignature;
+    EXPECT_EQ(left_signature.peek_value_at_path({}), "A");
+    EXPECT_EQ(left_signature.peek_value_at_path({0}), "A0");
+    EXPECT_EQ(left_signature.peek_value_at_path({1}), "A1");
+    EXPECT_EQ(left_signature.peek_value_at_path({0, 0}), "?");
+    EXPECT_EQ(left_signature.peek_value_at_path({0, 1}), "?");
+    EXPECT_EQ(left_signature.peek_value_at_path({1, 0}), "?");
+    EXPECT_EQ(left_signature.peek_value_at_path({1, 1}), "?");
+
+    const auto& right_signature = la.state(right).incompleteSignature;
+    EXPECT_EQ(right_signature.peek_value_at_path({}), "B");
+    EXPECT_EQ(right_signature.peek_value_at_path({0}), "B0");
+    EXPECT_EQ(right_signature.peek_value_at_path({1}), "B1");
+    EXPECT_EQ(right_signature.peek_value_at_path({0, 0}), "?");
+    EXPECT_EQ(right_signature.peek_value_at_path({0, 1}), "?");
+    EXPECT_EQ(right_signature.peek_value_at_path({1, 0}), "?");
+    EXPECT_EQ(right_signature.peek_value_at_path({1, 1}), "?");
+
+    EXPECT_EQ(left_signature.missing_count(), 4u);
+    EXPECT_EQ(right_signature.missing_count(), 4u);
+}
+
 TEST(LearnerAutomatonTest, LearnsThreeStateAutomatonWithOneSelfLoopAndOneAbsorbingState) {
     LearnerAutomaton la(2, 1);
 
     const StateId root = la.create_initial_state();
-    auto& root_node = la.state(root);
+    auto& root_signature = la.state(root).incompleteSignature;
+    make_complete_depth_1_signature(root_signature, "R", {"S", "T"});
+    ASSERT_EQ(la.finalize_state(root), root);
 
-    auto& root_sig = root_node.incompleteSignature;
-    EXPECT_EQ(root_sig.read_value_at_path({}), "?");
-    root_sig.set_value_at_last_read_node("R");
+    const StateId q_s = la.transition(root, 0);
+    const StateId q_t = la.transition(root, 1);
+    ASSERT_NE(q_s, q_t);
 
-    EXPECT_EQ(root_sig.read_value_at_path({0}), "?");
-    root_sig.set_value_at_last_read_node("S");
+    auto& q_s_signature = la.state(q_s).incompleteSignature;
+    EXPECT_EQ(q_s_signature.peek_value_at_path({}), "S");
+    set_node_value(q_s_signature, {0}, "S");
+    set_node_value(q_s_signature, {1}, "T");
+    ASSERT_EQ(la.finalize_state(q_s), q_s);
 
-    EXPECT_EQ(root_sig.read_value_at_path({1}), "?");
-    root_sig.set_value_at_last_read_node("T");
+    auto& q_t_signature = la.state(q_t).incompleteSignature;
+    EXPECT_EQ(q_t_signature.peek_value_at_path({}), "T");
+    set_node_value(q_t_signature, {0}, "T");
+    set_node_value(q_t_signature, {1}, "T");
+    ASSERT_EQ(la.finalize_state(q_t), q_t);
 
-    ASSERT_TRUE(root_sig.is_complete());
+    const StateId q_s_via_s_0 = la.transition(q_s, 0);
+    const StateId q_t_via_s_1 = la.transition(q_s, 1);
+    const StateId q_t_via_t_0 = la.transition(q_t, 0);
+    const StateId q_t_via_t_1 = la.transition(q_t, 1);
 
-    const StateId returned_root = la.finalize_state(root);
-    EXPECT_EQ(returned_root, root);
+    auto complete_frontier_signature = [&](StateId id,
+                                           const Output& input_0_output,
+                                           const Output& input_1_output) {
+        auto& signature = la.state(id).incompleteSignature;
+        set_node_value(signature, {0}, input_0_output);
+        set_node_value(signature, {1}, input_1_output);
+    };
 
-    const StateId s0 = la.state(root).transitions[0];
-    const StateId s1 = la.state(root).transitions[1];
+    complete_frontier_signature(q_s_via_s_0, "S", "T");
+    EXPECT_EQ(la.finalize_state(q_s_via_s_0), q_s);
 
-    ASSERT_NE(s0, LearnerAutomaton::invalidStateId);
-    ASSERT_NE(s1, LearnerAutomaton::invalidStateId);
-    ASSERT_NE(s0, s1);
+    complete_frontier_signature(q_t_via_s_1, "T", "T");
+    EXPECT_EQ(la.finalize_state(q_t_via_s_1), q_t);
 
-    {
-        auto& n0 = la.state(s0);
-        auto& sig0 = n0.incompleteSignature;
+    complete_frontier_signature(q_t_via_t_0, "T", "T");
+    EXPECT_EQ(la.finalize_state(q_t_via_t_0), q_t);
 
-        EXPECT_EQ(sig0.read_value_at_path({}), "?");
-        sig0.set_value_at_last_read_node("1");
+    complete_frontier_signature(q_t_via_t_1, "T", "T");
+    EXPECT_EQ(la.finalize_state(q_t_via_t_1), q_t);
 
-        EXPECT_EQ(sig0.read_value_at_path({0}), "?");
-        sig0.set_value_at_last_read_node("1");
+    EXPECT_EQ(la.state_count(), 7u);
 
-        EXPECT_EQ(sig0.read_value_at_path({1}), "?");
-        sig0.set_value_at_last_read_node("1");
-
-        ASSERT_TRUE(sig0.is_complete());
-        EXPECT_EQ(la.finalize_state(s0), s0);
+    std::size_t complete_count = 0;
+    std::size_t merged_count = 0;
+    std::size_t incomplete_count = 0;
+    for (StateId id = 0; id < la.state_count(); ++id) {
+        if (la.is_complete(id)) {
+            ++complete_count;
+        } else if (la.is_merged(id)) {
+            ++merged_count;
+        } else if (la.is_incomplete(id)) {
+            ++incomplete_count;
+        }
     }
 
-    {
-        auto& n1 = la.state(s1);
-        auto& sig1 = n1.incompleteSignature;
+    EXPECT_EQ(complete_count, 3u);
+    EXPECT_EQ(merged_count, 4u);
+    EXPECT_EQ(incomplete_count, 0u);
 
-        EXPECT_EQ(sig1.read_value_at_path({}), "?");
-        sig1.set_value_at_last_read_node("2");
+    EXPECT_EQ(la.transition(root, 0), q_s);
+    EXPECT_EQ(la.transition(root, 1), q_t);
+    EXPECT_EQ(la.transition(q_s, 0), q_s);
+    EXPECT_EQ(la.transition(q_s, 1), q_t);
+    EXPECT_EQ(la.transition(q_t, 0), q_t);
+    EXPECT_EQ(la.transition(q_t, 1), q_t);
 
-        EXPECT_EQ(sig1.read_value_at_path({0}), "?");
-        sig1.set_value_at_last_read_node("2");
-
-        EXPECT_EQ(sig1.read_value_at_path({1}), "?");
-        sig1.set_value_at_last_read_node("2");
-
-        ASSERT_TRUE(sig1.is_complete());
-        EXPECT_EQ(la.finalize_state(s1), s1);
-    }
-
-    EXPECT_EQ(la.state_count(), 3u);
-    EXPECT_EQ(la.state(root).status, LearnerAutomaton::StateStatus::Complete);
-    EXPECT_EQ(la.state(s0).status, LearnerAutomaton::StateStatus::Complete);
-    EXPECT_EQ(la.state(s1).status, LearnerAutomaton::StateStatus::Complete);
-
-    EXPECT_NE(la.state(s0).completeSignature, la.state(s1).completeSignature);
+    EXPECT_EQ(la.state(root).completeSignature, "(R(S)(T))");
+    EXPECT_EQ(la.state(q_s).completeSignature, "(S(S)(T))");
+    EXPECT_EQ(la.state(q_t).completeSignature, "(T(T)(T))");
 }
-

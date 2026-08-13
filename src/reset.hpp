@@ -196,11 +196,7 @@ public:
             return;
         }
 
-        if (promote()) {
-            reset_step();
-        } else {
-            advance();
-        }
+        advance();
     }
 
 protected:
