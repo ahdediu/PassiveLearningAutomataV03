@@ -1,0 +1,105 @@
+BACK deterministic baseline before RESET-base migration
+generated=2026-08-13 Europe/Lisbon
+git_head=85bed0389a280863665fd31a2715e0320668cac3
+compiler=Apple clang 21.0.0 arm64, -std=c++20 -O2
+implementation=src/back.hpp (working tree at baseline generation time)
+seeds=42..51
+termination=BackLearner::stopCondition() (no trial cap)
+equivalence=reachable deterministic mapping and complete-state surjectivity, matching learning_main.cpp::check_equivalence
+timing_ms=informational_only_not_for_exact_comparison
+sha256 src/back.hpp=24427c8a3bdd31bfd9d972830b94bed3fb6457c36f0f6cb29d77f6e148cba691
+sha256 src/core/learnerAutomaton.hpp=3096178f7d3fd5ce2b572419588aa65145c4a820524e90473e51b5849a2b6e20
+sha256 src/core/signature.hpp=a0062534f6b5def8667edfade30106ba87431bacca116d66082b3ebb27bb1fdd
+sha256 src/examples/automata_examples.hpp=7f157e0917e7a9a59385706c7fecff3fb089d5d4d1768437a3816a1b318202f7
+sha256 data/random/D1testAutomata10to640expStates.txt=ba096c2b7dbd27a41d9518e87aadfd7faf549011a5eb19ca3fcab4e03c99a8d8
+sha256 data/results/GridsWithDistinctWalls/grid1.txt=365e01494773c40f2ebe7ea6d3cc9bcf0e24c7c2904a889bd03068dedebf6238
+sha256 data/results/NoWallsNoLabelingHelp/grid1.txt=ccb290c7d1ba831e887603c57014cbc89b76c7c9f547a5afc88897a167804305
+target_source two_state_flip src/examples/automata_examples.hpp
+target_source degree_one_example src/examples/automata_examples.hpp
+target_source degree_two_example src/examples/automata_examples.hpp
+target_source D1_10 data/random/D1testAutomata10to640expStates.txt:1
+target_source D1_80 data/random/D1testAutomata10to640expStates.txt:4
+target_source D1_160 data/random/D1testAutomata10to640expStates.txt:5
+target_source G1_176_labeled_wall data/results/GridsWithDistinctWalls/grid1.txt:1
+target_source G5_86_no_wall_labels data/results/NoWallsNoLabelingHelp/grid1.txt:1
+target	seed	depth	trials	?	!	?+!	merges	complete	merged	incomplete	generated	stopped	equivalent	timing_ms
+two_state_flip	42	0	15	5	0	5	3	2	3	0	5	true	true	0.013
+two_state_flip	43	0	13	5	0	5	3	2	3	0	5	true	true	0.008
+two_state_flip	44	0	14	5	0	5	3	2	3	0	5	true	true	0.013
+two_state_flip	45	0	11	5	0	5	3	2	3	0	5	true	true	0.010
+two_state_flip	46	0	11	5	0	5	3	2	3	0	5	true	true	0.007
+two_state_flip	47	0	11	5	0	5	3	2	3	0	5	true	true	0.006
+two_state_flip	48	0	11	5	0	5	3	2	3	0	5	true	true	0.006
+two_state_flip	49	0	10	5	0	5	3	2	3	0	5	true	true	0.005
+two_state_flip	50	0	20	5	0	5	3	2	3	0	5	true	true	0.007
+two_state_flip	51	0	12	5	0	5	3	2	3	0	5	true	true	0.008
+degree_one_example	42	1	91	19	21	40	5	4	5	0	9	true	true	0.021
+degree_one_example	43	1	74	19	18	37	5	4	5	0	9	true	true	0.016
+degree_one_example	44	1	76	19	19	38	5	4	5	0	9	true	true	0.015
+degree_one_example	45	1	84	19	23	42	5	4	5	0	9	true	true	0.017
+degree_one_example	46	1	77	19	17	36	5	4	5	0	9	true	true	0.016
+degree_one_example	47	1	74	19	18	37	5	4	5	0	9	true	true	0.017
+degree_one_example	48	1	80	19	21	40	5	4	5	0	9	true	true	0.015
+degree_one_example	49	1	61	19	8	27	5	4	5	0	9	true	true	0.016
+degree_one_example	50	1	68	19	15	34	5	4	5	0	9	true	true	0.014
+degree_one_example	51	1	76	19	19	38	5	4	5	0	9	true	true	0.015
+degree_two_example	42	2	338	63	98	161	8	7	8	0	15	true	true	0.050
+degree_two_example	43	2	322	63	88	151	8	7	8	0	15	true	true	0.047
+degree_two_example	44	2	348	63	85	148	8	7	8	0	15	true	true	0.048
+degree_two_example	45	2	340	63	99	162	8	7	8	0	15	true	true	0.048
+degree_two_example	46	2	332	63	93	156	8	7	8	0	15	true	true	0.047
+degree_two_example	47	2	278	63	70	133	8	7	8	0	15	true	true	0.042
+degree_two_example	48	2	319	63	71	134	8	7	8	0	15	true	true	0.045
+degree_two_example	49	2	315	63	79	142	8	7	8	0	15	true	true	0.044
+degree_two_example	50	2	321	63	82	145	8	7	8	0	15	true	true	0.046
+degree_two_example	51	2	316	63	84	147	8	7	8	0	15	true	true	0.048
+D1_10	42	2	543	71	85	156	9	8	9	0	17	true	true	0.063
+D1_10	43	2	346	71	67	138	9	8	9	0	17	true	true	0.055
+D1_10	44	2	623	71	86	157	9	8	9	0	17	true	true	0.066
+D1_10	45	2	457	71	77	148	9	8	9	0	17	true	true	0.057
+D1_10	46	2	396	71	89	160	9	8	9	0	17	true	true	0.057
+D1_10	47	2	652	71	81	152	9	8	9	0	17	true	true	0.064
+D1_10	48	2	319	71	58	129	9	8	9	0	17	true	true	0.048
+D1_10	49	2	469	71	57	128	9	8	9	0	17	true	true	0.055
+D1_10	50	2	379	71	74	145	9	8	9	0	17	true	true	0.053
+D1_10	51	2	748	71	75	146	9	8	9	0	17	true	true	0.068
+D1_80	42	3	7916	1087	1491	2578	68	67	68	0	135	true	true	1.354
+D1_80	43	3	8096	1087	1505	2592	68	67	68	0	135	true	true	1.548
+D1_80	44	3	7498	1087	1458	2545	68	67	68	0	135	true	true	1.309
+D1_80	45	3	8530	1087	1563	2650	68	67	68	0	135	true	true	1.382
+D1_80	46	3	7224	1087	1535	2622	68	67	68	0	135	true	true	1.445
+D1_80	47	3	12353	1087	1464	2551	68	67	68	0	135	true	true	1.638
+D1_80	48	3	8959	1087	1465	2552	68	67	68	0	135	true	true	1.568
+D1_80	49	3	6987	1087	1509	2596	68	67	68	0	135	true	true	1.407
+D1_80	50	3	9800	1087	1587	2674	68	67	68	0	135	true	true	1.627
+D1_80	51	3	14372	1087	1471	2558	68	67	68	0	135	true	true	1.986
+D1_160	42	4	24639	3999	6478	10477	125	124	125	0	249	true	true	8.243
+D1_160	43	4	28611	3999	6583	10582	125	124	125	0	249	true	true	7.185
+D1_160	44	4	23897	3999	6354	10353	125	124	125	0	249	true	true	6.349
+D1_160	45	4	23811	3999	6463	10462	125	124	125	0	249	true	true	6.816
+D1_160	46	4	29193	3999	6381	10380	125	124	125	0	249	true	true	8.048
+D1_160	47	4	26605	3999	6478	10477	125	124	125	0	249	true	true	7.221
+D1_160	48	4	25919	3999	6510	10509	125	124	125	0	249	true	true	6.500
+D1_160	49	4	24139	3999	6464	10463	125	124	125	0	249	true	true	5.897
+D1_160	50	4	25381	3999	6598	10597	125	124	125	0	249	true	true	5.730
+D1_160	51	4	23377	3999	6285	10284	125	124	125	0	249	true	true	5.238
+G1_176_labeled_wall	42	1	18349	2469	2699	5168	463	154	463	0	617	true	true	16.325
+G1_176_labeled_wall	43	1	17236	2469	2643	5112	463	154	463	0	617	true	true	16.079
+G1_176_labeled_wall	44	1	20953	2469	2562	5031	463	154	463	0	617	true	true	15.630
+G1_176_labeled_wall	45	1	34003	2469	2951	5420	463	154	463	0	617	true	true	18.718
+G1_176_labeled_wall	46	1	20260	2469	2599	5068	463	154	463	0	617	true	true	15.533
+G1_176_labeled_wall	47	1	24502	2469	2825	5294	463	154	463	0	617	true	true	16.954
+G1_176_labeled_wall	48	1	16878	2469	2529	4998	463	154	463	0	617	true	true	15.029
+G1_176_labeled_wall	49	1	20249	2469	2688	5157	463	154	463	0	617	true	true	16.069
+G1_176_labeled_wall	50	1	25839	2469	2710	5179	463	154	463	0	617	true	true	16.875
+G1_176_labeled_wall	51	1	19198	2469	2714	5183	463	154	463	0	617	true	true	15.267
+G5_86_no_wall_labels	42	3	125861	22101	37608	59709	259	86	259	0	345	true	true	24.213
+G5_86_no_wall_labels	43	3	123339	22101	37451	59552	259	86	259	0	345	true	true	23.748
+G5_86_no_wall_labels	44	3	121803	22101	37182	59283	259	86	259	0	345	true	true	22.901
+G5_86_no_wall_labels	45	3	127739	22101	37812	59913	259	86	259	0	345	true	true	23.915
+G5_86_no_wall_labels	46	3	124473	22101	37109	59210	259	86	259	0	345	true	true	24.289
+G5_86_no_wall_labels	47	3	130048	22101	38406	60507	259	86	259	0	345	true	true	25.182
+G5_86_no_wall_labels	48	3	121392	22101	37148	59249	259	86	259	0	345	true	true	23.432
+G5_86_no_wall_labels	49	3	127455	22101	37884	59985	259	86	259	0	345	true	true	24.645
+G5_86_no_wall_labels	50	3	124674	22101	37784	59885	259	86	259	0	345	true	true	23.585
+G5_86_no_wall_labels	51	3	142341	22101	38027	60128	259	86	259	0	345	true	true	25.822
