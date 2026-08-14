@@ -1,11 +1,14 @@
-#include <fstream>
+#include <cmath>
 #include <chrono>
 #include <exception>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <map>
 #include <queue>
 #include <random>
+#include <set>
+#include <stdexcept>
 #include <vector>
 
 #include "core/automaton.hpp"
@@ -88,6 +91,24 @@ enum class ProtocolType {
     Back
 };
 
+enum class ExperimentGroup {
+    SmallExamples,
+    Table1,
+    Table2,
+    AllINS
+};
+
+enum class SeedMode {
+    Deterministic,
+    RandomDevice
+};
+
+// Source-level experiment selection for CLion runs.
+constexpr ExperimentGroup selected_experiment_group = ExperimentGroup::AllINS;
+constexpr SeedMode selected_seed_mode = SeedMode::Deterministic;
+constexpr int manuscript_num_runs = 10;
+constexpr int small_example_num_runs = 1;
+
 struct RunResult {
     std::string name;
     std::string protocol;
@@ -96,6 +117,8 @@ struct RunResult {
     bool equivalent;
     std::size_t s;  // Complete states
     std::size_t m;  // Merged states
+    std::size_t incomplete;
+    std::size_t generated;
     std::size_t k;  // Alphabet size
     int d;          // Distinguishability degree
 };
@@ -109,6 +132,8 @@ struct AggregatedResult {
     double avg_total_backs;
     double avg_s;
     double avg_m;
+    double avg_incomplete;
+    double avg_generated;
     double avg_duration_ms;
     double success_rate;
     std::size_t k;
@@ -175,10 +200,7 @@ RunResult run_example(const Automaton& target,
     });
 
     try {
-        protocol->reset();
-        while (!learner->stopCondition()) {
-            protocol->step();
-        }
+        protocol->run();
     } catch (const std::exception& e) {
         std::cerr << "\n  Protocol error: " << e.what() << std::endl;
     }
@@ -192,9 +214,19 @@ RunResult run_example(const Automaton& target,
         std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
     std::size_t complete_count = 0;
+    std::size_t merged_count = 0;
+    std::size_t incomplete_count = 0;
     for (std::size_t i = 0; i < model_ptr->state_count(); ++i) {
-        if (model_ptr->is_complete(i)) {
-            complete_count++;
+        switch (model_ptr->state(i).status) {
+            case LearnerAutomaton::StateStatus::Complete:
+                ++complete_count;
+                break;
+            case LearnerAutomaton::StateStatus::Merged:
+                ++merged_count;
+                break;
+            case LearnerAutomaton::StateStatus::Incomplete:
+                ++incomplete_count;
+                break;
         }
     }
     std::size_t total_states = model_ptr->state_count();
@@ -205,7 +237,9 @@ RunResult run_example(const Automaton& target,
             duration,
             check_equivalence(target, *learner, *model_ptr),
             complete_count,
-            total_states - complete_count,
+            merged_count,
+            incomplete_count,
+            total_states,
             target.input_count(),
             signature_depth};
 }
@@ -239,6 +273,8 @@ AggregatedResult run_benchmark(const Automaton& target,
     double total_backs = 0;
     double total_s = 0;
     double total_m = 0;
+    double total_incomplete = 0;
+    double total_generated = 0;
     double total_duration = 0;
     int successful_runs = 0;
     std::size_t k = 0;
@@ -258,9 +294,11 @@ AggregatedResult run_benchmark(const Automaton& target,
             total_backs += res.stats.queries + res.stats.backs;
             total_s += res.s;
             total_m += res.m;
+            total_incomplete += res.incomplete;
+            total_generated += res.generated;
             total_duration += res.duration_ms;
             k = res.k;
-            if (res.equivalent) {
+            if (res.equivalent && res.incomplete == 0) {
                 successful_runs++;
             }
         } catch (const std::exception& e) {
@@ -281,6 +319,8 @@ AggregatedResult run_benchmark(const Automaton& target,
             total_backs / num_runs,
             total_s / num_runs,
             total_m / num_runs,
+            total_incomplete / num_runs,
+            total_generated / num_runs,
             total_duration / num_runs,
             (double)successful_runs / num_runs * 100.0,
             k,
@@ -288,20 +328,25 @@ AggregatedResult run_benchmark(const Automaton& target,
 }
 
 void print_comparison(const std::vector<AggregatedResult>& results) {
-    std::cout << "\n" << std::setfill('=') << std::setw(145) << "" << std::setfill(' ') << "\n";
+    constexpr int table_width = 174;
+    std::cout << "\n" << std::setfill('=') << std::setw(table_width) << ""
+              << std::setfill(' ') << "\n";
     std::cout << std::left << std::setw(20) << "Example" 
               << std::setw(10) << "Protocol" 
               << std::setw(5) << "d"
               << std::right << std::setw(12) << "Trials(T)" 
               << std::setw(10) << "?" 
               << std::setw(10) << "!" 
-              << std::setw(10) << "Backs"
+              << std::setw(10) << "? + !"
               << std::setw(10) << "s (Cpl)" 
               << std::setw(10) << "m (Mrg)"
+              << std::setw(10) << "i (Rem)"
+              << std::setw(12) << "Generated"
               << std::setw(15) << "s+m = kn+1" 
               << std::setw(12) << "Time(ms)" 
               << std::setw(12) << "Success %" << "\n";
-    std::cout << std::setfill('-') << std::setw(145) << "" << std::setfill(' ') << "\n";
+    std::cout << std::setfill('-') << std::setw(table_width) << ""
+              << std::setfill(' ') << "\n";
 
     for (const auto& res : results) {
         // Formula: s + m = k*n + 1 where n = s
@@ -318,78 +363,173 @@ void print_comparison(const std::vector<AggregatedResult>& results) {
                   << std::setw(10) << (int)res.avg_total_backs
                   << std::setw(10) << (int)res.avg_s 
                   << std::setw(10) << (int)res.avg_m
+                  << std::setw(10) << (int)res.avg_incomplete
+                  << std::setw(12) << (int)res.avg_generated
                   << std::setw(15) << (check + " (" + std::to_string((int)left) + ")") 
                   << std::setw(12) << res.avg_duration_ms 
                   << std::setw(12) << res.success_rate << "%\n";
     }
-    std::cout << std::setfill('=') << std::setw(145) << "" << std::setfill(' ') << "\n\n";
+    std::cout << std::setfill('=') << std::setw(table_width) << ""
+              << std::setfill(' ') << "\n\n";
+}
+
+struct DatasetSpec {
+    std::string name;
+    std::string relative_path;
+    std::size_t expected_states;
+};
+
+std::filesystem::path resolve_required_dataset(const std::string& relative_path) {
+    const std::filesystem::path requested(relative_path);
+    std::vector<std::filesystem::path> roots;
+
+    auto current = std::filesystem::current_path();
+    for (int i = 0; i < 5; ++i) {
+        roots.push_back(current);
+        if (!current.has_parent_path()) {
+            break;
+        }
+        current = current.parent_path();
+    }
+    roots.push_back(std::filesystem::path(__FILE__).parent_path());
+
+    for (const auto& root : roots) {
+        const auto candidate = root / requested;
+        if (std::filesystem::is_regular_file(candidate)) {
+            const auto resolved = std::filesystem::canonical(candidate);
+            std::cout << "Resolved dataset: " << resolved << '\n';
+            return resolved;
+        }
+    }
+
+    throw std::runtime_error("Required dataset not found: " + relative_path);
+}
+
+Automaton load_required_dataset(const DatasetSpec& spec) {
+    const auto path = resolve_required_dataset(spec.relative_path);
+    auto automata = Automaton::read_all_from_file(path.string());
+    if (automata.size() != 1) {
+        throw std::runtime_error(spec.name + " must contain exactly one automaton: " +
+                                 path.string());
+    }
+    if (automata.front().state_count() != spec.expected_states) {
+        throw std::runtime_error(spec.name + " has " +
+                                 std::to_string(automata.front().state_count()) +
+                                 " states; expected " +
+                                 std::to_string(spec.expected_states));
+    }
+    return std::move(automata.front());
 }
 
 int main() {
     try {
         std::vector<AggregatedResult> results;
-        const int num_runs = 10;
+        const bool repeatable_experiments =
+            selected_seed_mode == SeedMode::Deterministic;
 
-        const bool repeatable_experiments = false;
-
-        auto run_benchmarks = [&](const Automaton& target, const std::string& name, bool skip_no_loop_detect = false, int depth = -1) {
-            if (!skip_no_loop_detect) {
-                //results.push_back(run_benchmark(target, name, ProtocolType::Reset, num_runs, depth, repeatable_experiments));
+        auto run_protocols = [&](const Automaton& target,
+                                 const std::string& name,
+                                 int num_runs,
+                                 bool run_reset,
+                                 bool run_back) {
+            if (run_reset) {
+                results.push_back(run_benchmark(target, name, ProtocolType::Reset,
+                                                num_runs, -1,
+                                                repeatable_experiments));
             }
-            results.push_back(run_benchmark(target, name, ProtocolType::Back, num_runs, depth, repeatable_experiments));
+            if (run_back) {
+                results.push_back(run_benchmark(target, name, ProtocolType::Back,
+                                                num_runs, -1,
+                                                repeatable_experiments));
+            }
         };
 
-//        run_benchmarks(examples::two_state_flip(), "two_state_flip");
-//        run_benchmarks(examples::three_state_cycle(), "three_state_cycle");
-//        run_benchmarks(examples::degree_one_example(), "degree_one_example", true);
-//        run_benchmarks(examples::degree_two_example(), "degree_two_example", true);
-//        run_benchmarks(examples::reversible_maze_example(), "reversible_maze");
-//        run_benchmarks(examples::parser_symbolic_example(), "parser_symbolic");
-//        run_benchmarks(examples::parser_numeric_example(), "parser_numeric");
-
-        struct BenchmarkFile {
-            std::string relative_path;
-            std::string prefix;
+        const std::vector<DatasetSpec> labeled_walls = {
+            {"G1_176", "data/results/GridsWithDistinctWalls/grid1.txt", 176},
+            {"G2_297", "data/results/GridsWithDistinctWalls/grid2.txt", 297},
+            {"G3_176", "data/results/GridsWithDistinctWalls/grid3.txt", 176},
+            {"G4_297", "data/results/GridsWithDistinctWalls/grid4.txt", 297},
+        };
+        const std::vector<DatasetSpec> no_wall_labels = {
+            {"G5_86", "data/results/NoWallsNoLabelingHelp/grid1.txt", 86},
+            {"G6_191", "data/results/NoWallsNoLabelingHelp/grid2.txt", 191},
+            {"G7_94", "data/results/NoWallsNoLabelingHelp/grid3.txt", 94},
+            {"G8_191", "data/results/NoWallsNoLabelingHelp/grid4.txt", 191},
+        };
+        const std::vector<DatasetSpec> wall_context_labels = {
+            {"G09_86", "data/results/NoWallsLabelinHelp/grid1.txt", 86},
+            {"G10_191", "data/results/NoWallsLabelinHelp/grid2.txt", 191},
+            {"G11_94", "data/results/NoWallsLabelinHelp/grid3.txt", 94},
+            {"G12_191", "data/results/NoWallsLabelinHelp/grid4.txt", 191},
         };
 
-        std::vector<BenchmarkFile> benchmark_files = {
-            //{"data/random/D1testAutomata10to640expStates.txt", "D1_"},
-            {"data/grid1.txt", "G1_"},
-            {"data/grid2.txt", "G2_"},
-            {"data/grid3.txt", "G3_"},
-            {"data/grid4.txt", "G4_"}
+        auto run_small_examples = [&]() {
+            run_protocols(examples::two_state_flip(), "two_state_flip",
+                          small_example_num_runs, true, true);
+            run_protocols(examples::degree_one_example(), "degree_one_example",
+                          small_example_num_runs, true, true);
+            run_protocols(examples::degree_two_example(), "degree_two_example",
+                          small_example_num_runs, true, true);
         };
 
-        for (const auto& bf : benchmark_files) {
-            std::vector<std::string> potential_paths = {
-                bf.relative_path,
-                "../" + bf.relative_path,
-                "../../" + bf.relative_path,
-                "../../../" + bf.relative_path
-            };
-            
-            std::string file_path;
-            for (const auto& path : potential_paths) {
-                std::ifstream f(path);
-                if (f.good()) {
-                    file_path = path;
-                    break;
+        auto run_table1 = [&]() {
+            const auto d1_path = resolve_required_dataset(
+                "data/random/D1testAutomata10to640expStates.txt");
+            auto d1_automata = Automaton::read_all_from_file(d1_path.string());
+            const std::vector<std::size_t> expected_sizes =
+                {10, 20, 40, 80, 160, 320, 640};
+            if (d1_automata.size() != expected_sizes.size()) {
+                throw std::runtime_error("D1 archive must contain exactly seven automata");
+            }
+            for (std::size_t i = 0; i < expected_sizes.size(); ++i) {
+                if (d1_automata[i].state_count() != expected_sizes[i]) {
+                    throw std::runtime_error(
+                        "D1 archive entry " + std::to_string(i) + " has " +
+                        std::to_string(d1_automata[i].state_count()) +
+                        " states; expected " + std::to_string(expected_sizes[i]));
+                }
+                run_protocols(d1_automata[i],
+                              "D1_" + std::to_string(expected_sizes[i]),
+                              manuscript_num_runs, true, true);
+            }
+            for (const auto& spec : labeled_walls) {
+                run_protocols(load_required_dataset(spec), spec.name,
+                              manuscript_num_runs, true, true);
+            }
+        };
+
+        auto run_table2 = [&](bool include_labeled_walls) {
+            if (include_labeled_walls) {
+                for (const auto& spec : labeled_walls) {
+                    run_protocols(load_required_dataset(spec), spec.name,
+                                  manuscript_num_runs, false, true);
                 }
             }
-
-            if (file_path.empty()) {
-                continue; // Skip if not found
+            for (const auto& spec : no_wall_labels) {
+                run_protocols(load_required_dataset(spec), spec.name,
+                              manuscript_num_runs, false, true);
             }
-
-            try {
-                auto file_automata = Automaton::read_all_from_file(file_path);
-                for (const auto& target : file_automata) {
-                    std::string name = bf.prefix + std::to_string(target.state_count());
-                    run_benchmarks(target, name);
-                }
-            } catch (const std::exception& e) {
-                std::cerr << "Error loading " << file_path << ": " << e.what() << std::endl;
+            for (const auto& spec : wall_context_labels) {
+                run_protocols(load_required_dataset(spec), spec.name,
+                              manuscript_num_runs, false, true);
             }
+        };
+
+        switch (selected_experiment_group) {
+            case ExperimentGroup::SmallExamples:
+                run_small_examples();
+                break;
+            case ExperimentGroup::Table1:
+                run_table1();
+                break;
+            case ExperimentGroup::Table2:
+                run_table2(true);
+                break;
+            case ExperimentGroup::AllINS:
+                run_table1();
+                // Table 1 already produces the four labeled-wall BACK rows.
+                run_table2(false);
+                break;
         }
 
         print_comparison(results);

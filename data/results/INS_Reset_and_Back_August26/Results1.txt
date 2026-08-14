@@ -1,0 +1,82 @@
+/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/cmake-build-debug-coverage/passive_learning_automata
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/random/D1testAutomata10to640expStates.txt"
+Benchmarking D1_10 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking D1_10 (Back) over 10 runs... [REPEATABLE]
+Benchmarking D1_20 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking D1_20 (Back) over 10 runs... [REPEATABLE]
+Benchmarking D1_40 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking D1_40 (Back) over 10 runs... [REPEATABLE]
+Benchmarking D1_80 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking D1_80 (Back) over 10 runs... [REPEATABLE]
+Benchmarking D1_160 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking D1_160 (Back) over 10 runs... [REPEATABLE]
+Benchmarking D1_320 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking D1_320 (Back) over 10 runs... [REPEATABLE]
+Benchmarking D1_640 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking D1_640 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/GridsWithDistinctWalls/grid1.txt"
+Benchmarking G1_176 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking G1_176 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/GridsWithDistinctWalls/grid2.txt"
+Benchmarking G2_297 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking G2_297 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/GridsWithDistinctWalls/grid3.txt"
+Benchmarking G3_176 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking G3_176 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/GridsWithDistinctWalls/grid4.txt"
+Benchmarking G4_297 (Reset) over 10 runs... [REPEATABLE]
+Benchmarking G4_297 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/NoWallsNoLabelingHelp/grid1.txt"
+Benchmarking G5_86 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/NoWallsNoLabelingHelp/grid2.txt"
+Benchmarking G6_191 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/NoWallsNoLabelingHelp/grid3.txt"
+Benchmarking G7_94 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/NoWallsNoLabelingHelp/grid4.txt"
+Benchmarking G8_191 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/NoWallsLabelinHelp/grid1.txt"
+Benchmarking G09_86 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/NoWallsLabelinHelp/grid2.txt"
+Benchmarking G10_191 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/NoWallsLabelinHelp/grid3.txt"
+Benchmarking G11_94 (Back) over 10 runs... [REPEATABLE]
+Resolved dataset: "/Users/adriandediu/CLionProjects/PassiveLearningAutomataV03/data/results/NoWallsLabelinHelp/grid4.txt"
+Benchmarking G12_191 (Back) over 10 runs... [REPEATABLE]
+
+==============================================================================================================================================================================
+Example             Protocol  d       Trials(T)         ?         !     ? + !   s (Cpl)   m (Mrg)   i (Rem)   Generated     s+m = kn+1    Time(ms)   Success %
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+D1_10               Reset     2          2528.9       149         0       149         8         9         0          17        OK (17)         1.6       100.0%
+D1_10               Back      2           493.2        71        74       145         8         9         0          17        OK (17)         0.6       100.0%
+D1_20               Reset     2         14501.8       248         0       248        14        15         0          29        OK (29)        12.7       100.0%
+D1_20               Back      2          1687.3       119       119       238        14        15         0          29        OK (29)         1.5       100.0%
+D1_40               Reset     3         75979.9      1417         0      1417        32        33         0          65        OK (65)        87.8       100.0%
+D1_40               Back      3          4444.1       527       729      1256        32        33         0          65        OK (65)         6.2       100.0%
+D1_80               Reset     3        129726.6      3009         0      3009        67        68         0         135       OK (135)       265.2       100.0%
+D1_80               Back      3          9173.5      1087      1504      2591        67        68         0         135       OK (135)        22.5       100.0%
+D1_160              Reset     4        526379.2     13408         0     13408       124       125         0         249       OK (249)      1756.5       100.0%
+D1_160              Back      4         25557.2      3999      6459     10458       124       125         0         249       OK (249)        84.0       100.0%
+D1_320              Reset     4       1519129.6     28369         0     28369       261       262         0         523       OK (523)     10166.0       100.0%
+D1_320              Back      4         70786.0      8383     13572     21955       261       262         0         523       OK (523)       436.1       100.0%
+D1_640              Reset     4       8413591.5     56857         0     56857       525       526         0        1051      OK (1051)    116516.7       100.0%
+D1_640              Back      4        227722.1     16831     27323     44154       525       526         0        1051      OK (1051)      2549.1       100.0%
+G1_176              Reset     1       2315267.7      5176         0      5176       154       463         0         617       OK (617)     17393.4       100.0%
+G1_176              Back      1         21746.7      2469      2692      5161       154       463         0         617       OK (617)       203.1       100.0%
+G2_297              Reset     2      40332443.5     62660         0     62660       289       868         0        1157      OK (1157)    501554.8       100.0%
+G2_297              Back      2        116521.1     18517     28477     46994       289       868         0        1157      OK (1157)      1371.8       100.0%
+G3_176              Reset     1       2480919.0      5514         0      5514       164       493         0         657       OK (657)     19885.7       100.0%
+G3_176              Back      1         22777.8      2629      2866      5495       164       493         0         657       OK (657)       222.8       100.0%
+G4_297              Reset     2      40332443.5     62660         0     62660       289       868         0        1157      OK (1157)    683300.8       100.0%
+G4_297              Back      2        116521.1     18517     28477     46994       289       868         0        1157      OK (1157)      1741.7       100.0%
+G5_86               Back      3        126912.5     22101     37641     59742        86       259         0         345       OK (345)       572.9       100.0%
+G6_191              Back      4       1098333.7    195925    343891    539816       191       574         0         765       OK (765)      8356.5       100.0%
+G7_94               Back      4        539730.3     96597    169309    265906        94       283         0         377       OK (377)      2379.8       100.0%
+G8_191              Back      3        286330.8     48981     83391    132372       191       574         0         765       OK (765)      2205.2       100.0%
+G09_86              Back      1         13182.6      1381      1529      2910        86       259         0         345       OK (345)        80.3       100.0%
+G10_191             Back      2         76927.9     12245     18831     31076       191       574         0         765       OK (765)       641.7       100.0%
+G11_94              Back      1         12137.7      1509      1662      3171        94       283         0         377       OK (377)       104.1       100.0%
+G12_191             Back      2         76927.9     12245     18831     31076       191       574         0         765       OK (765)       644.3       100.0%
+==============================================================================================================================================================================
+
+
+Process finished with exit code 0
