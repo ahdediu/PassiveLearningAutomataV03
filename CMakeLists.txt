@@ -72,6 +72,18 @@ target_link_libraries(passive_learning_automata
         auto_v03
 )
 
+add_executable(manuscript_run
+        tools/manuscript_run.cpp
+)
+target_link_libraries(manuscript_run
+        PRIVATE
+        auto_v03
+)
+target_compile_definitions(manuscript_run
+        PRIVATE
+        PLA_PROJECT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
 add_subdirectory(tools/generateIndoorMaps)
 
 include(GoogleTest)
